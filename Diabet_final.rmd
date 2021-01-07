@@ -1,0 +1,264 @@
+---
+title: \LARGE"Diabet"
+author: "Elena Oskrogo"
+date: "02/01/2021"
+output: pdf_document
+classoption: 11pt
+header-includes:
+    - \usepackage{"doc_style"}
+    - \usepackage{titling}
+    - \pretitle{\begin{flushleft}}
+    - \posttitle{\end{flushleft}}
+    - \preauthor{\begin{flushleft}}
+    - \postauthor{\end{flushleft}}
+    - \predate{\begin{flushleft}}
+    - \postdate{\end{flushleft}}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+\newpage
+
+# 1 Introduction
+
+For the second project of the "Capstone" course, I've chosen an "Early-stage diabetes risk prediction" dataset. 
+The dataset location is UCI Machine learning Repository <http://archive.ics.uci.edu/ml/datasets/Early+stage+diabetes+risk+prediction+dataset.>
+
+After the "Movielens: movie prediction" exercise, I would like to explore a different domain. With the Diabetes dataset, I have opportunities to practice machine leanings methods in disease diagnostics.
+
+This dataset contains the sign and symptom data of newly diabetic or would be diabetic patients. Data has been collected using direct questionnaires from Sylhet Diabetes Hospital patients in Sylhet, Bangladesh, and approved by a doctor. UCI repository posted data on July 2020.
+
+I've downloaded the available dataset to my laptop (file diabetes_data_upload.csv). Dataset has `r diabetes_dimension[1]` observations and `r diabetes_dimension[2]` attributes.
+
+
+Each observation represents information about one patient and contains followed attributes:
+
++ attribute 1 `r names_bold[1]` - age of patient;
++ attribute 2 `r names_bold[2]` - with values Male or Female;
++ attribute 3 - 16 various symptoms - with values Yes or No;
++ attribute 17 `r names_bold[17]` - diagnosis - with values Positive or Negative
+
+
+List of provided symptoms is `r symptoms` .
+
+
+Here is the preview of first 6 lines of dataset:
+
+```{r datset_preview, , message=FALSE, warning=FALSE, echo=FALSE}
+options(width=90)
+head(wide_data)
+```
+
+The project aims to predict class values based on age, gender, and medical symptoms. 
+
+First, I performed a descriptive data analysis to understood data,  research missing values, clean, transform if needed, and identify trends.
+
+Second, I split the original dataset into training and validation sets.
+
+After, I built the models to predict the class value based on available predictors. 
+I trained my models on the training data set and verified accuracy on the validation dataset. To compare different models, I used root mean squared error (RMSE) as a loss function and model overall accuracy. 
+
+As I inserted variable values directly in the report text, I did not use the standard knit menu to create pdf output, but instead, I used command *rmarkdown::render("file_name")* to compile in pdf output.
+
+Lastly, I provided some conclusions about my findings and suggestions regarding future development.
+
+\newpage
+
+# 2 Methods/ analysis
+
+## 2.1 Original data overview, detail dataset description
+
+
+Dataset does not require data transformation: each line represents observation for one patient, and each attribute has only one information.
+
+First, I've reviewed all attributes to find any missing values (N/A or null). I did not found any anomalies.
+
+I've also checked that data does not have an incredible value as very high or negative age values, or symptoms have other matters than "Yes" or "No", or Class has different values than "Positive" or "Negative". Again, I did not found any anomalies.
+
+So the dataset is ready for analysis. 
+
+The only transformation I've applied to columns name: purely cosmetic one - start each word with capitals letter to have the same visual presentation. I also replace " " by "_", as I experienced a problem with one function during the analysis stage.
+
+Let's first review each attribute individually.
+
+Here is a general distribution between patients diagnosed with diabetes and healthy ones:
+
+```{r gg_class, message=FALSE, warning=FALSE, echo=FALSE}
+gg_class
+```
+
+We can see that `r class_pos` where diagnosed with diabetes, which represents `r class_pos/diabetes_dimension[1] * 100` %. 
+
+__Age__ - age of patients is numeric value between 16 and 90, as provided by *summary()* function.
+
+```{r gg_age, message=FALSE, warning=FALSE, echo=FALSE}
+gg_age
+```
+_Gender_ - categorical data with distribution:
+
+```{r gg_gender, message=FALSE, warning=FALSE, echo=FALSE}
+gg_gender
+```
+
+Male patients are more represented in this dataset.
+
+Here is demographic distribution of dataset:
+
+```{r gg_demo, message=FALSE, warning=FALSE, echo=FALSE}
+gg_demo
+```
+
+From visual distribution it is difficult to observe any trends related to Age. We can notice that Female patients were more frequently tested positive.
+
+All symptoms are categorical values with values 'Yes' or 'No'. For visualization I've used three types of plots: split __Class__ by individual symptoms, second  split individual symptoms by __Class__  and third one split individual symptom with  facet by __Gender__.
+
+First type of plot help to represent how many people who where diagnosed as Negative or Positive have particular symptom. We can observe that this relationship depends on symptoms.
+
+In case of __Polyuria__ it will be:
+
+```{r gg_vis1, message=FALSE, warning=FALSE, echo=FALSE}
+gg_c_polu
+```
+
+We can observe high number of people with diabetes who present __Polyuria__ symptoms and relatively small part of people who does not have diabetes and have __Polyuria__ symptom.
+
+Same plot for __Alopecia__ will be presented as :
+
+```{r gg_vis2, message=FALSE, warning=FALSE, echo=FALSE}
+gg_c_a
+```
+
+Here we can observe that half of people who does not have diabetes had __Alopecia__ symptom  and small part of patient with diabetes will have __Alopecia__. This type of bar help to visualize how frequently particular symptom present in case of diabetes.
+
+Second type of plot allows to visualize how often symptom is present and how many positive cases reported for people with this sympthom.
+One of most frequent symptoms is __Weakness__ :
+
+```{r gg_weak, message=FALSE, warning=FALSE, echo=FALSE}
+gg_weak
+```
+
+
+We can see that i.e. nearly 50% of patients has __Polyuria__ :
+
+```{r gg_polyu, message=FALSE, warning=FALSE, echo=FALSE}
+gg_polu
+```
+
+
+From the other side __Obesity__ is one of less frequent symptoms:
+
+```{r gg_o, message=FALSE, warning=FALSE, echo=FALSE}
+gg_o
+```
+
+Third type of plot, allow to see if __Gender__ has influence on symptoms, as i.e. in case of __Alopecia__ :
+
+```{r gg_a_g, message=FALSE, warning=FALSE, echo=FALSE}
+gg_a_g
+```
+We can clearly see that man have __Alopecia__ more frequently than woman and that __Alopecia__ is not the most frequent diabetes symptom. 
+This visualization provide some interesting inside on symptoms and diabetes diagnostic but does not define clear picture which symptoms is the most important, it is also not easy to visualize impact of combination of several symptoms.
+
+To estimate how each attribute influence __Class__ value and if we have any influence between attribute I've used Anova and Chi Test methods.
+
+As __Age__ is numeric value and __Class__ is categorical one I've used ANOVA to estimate if __Age__ is significant one for __Class__ prediction.
+The results of ANOVA (function *aov()* for __Age__ ~ __Class__):
+
+```{r Age_res, message=FALSE, warning=FALSE, echo=FALSE}
+summary(Age_res)
+```
+
+As Pr(>F) is less than 0.05, we can conclude that __Age__ has significant influence on __Class__. This conclusion was not clearly identify at data visualization part.
+
+I've also used ANOVA to check if __Age__ has influence on others attributes, here is output of ANOVA *summary()*:
+
+```{r Anova_Age_others, message=FALSE, warning=FALSE, echo=FALSE}
+aov_tot_s
+```
+
+Symptoms marked with one or several * are significantly dependent on __Age__. It looks quite logical, as all those symptoms appear with increasing age.
+
+I've also verified if __Gender__ is significant attributes for __Class__, as both are categorical variable I've used Chi test. Here are results:
+
+```{r Gender_chi, message=FALSE, warning=FALSE, echo=FALSE}
+Gender_chi
+Gender_chi$residuals
+```
+
+From results we can see that __Gender__ is significant predictor for __Class__ as p-value is less than 0.05, also from residuals display we can see that individually __Gender__ Female is most significant for Positive cases and __Male__ is most significant for Negative case.
+
+I've performed Chi Test for all symptoms attributes and attribute __Class__.
+Here is the list of significant feautures (p-value < 0.05): 
+
+```{r symptoms_chi, message=FALSE, warning=FALSE, echo=FALSE}
+df_features_s
+```
+
+
+I also compare if symptoms have dependency between them:
+
+```{r symptoms_tot_chi, message=FALSE, warning=FALSE, echo=FALSE}
+mat[,2-16]
+```
+
+__PolyUria__ is only symptom that is influenced by all others attributes:
+
+```{r symptoms_tot_chi_max, message=FALSE, warning=FALSE, echo=FALSE}
+apply(mat,2,max)
+```
+
+\newpage
+
+## 2.2 Analysis, model building
+
+Prior to build models I've split original dataset into training and test partition in proportion 80% ~ 20% and defined RMSE function. 
+I've used package carret and tried several methods as __*Knn*__, __*Rborist*__, __*Random Forest*__, __*SVM*__ and __*Rpart*__. All methods where trained and tuned on training dataset.
+
+After I evaluated each model on test dataset, calculated RMSE and model overall accuracy from confusion matrix. For some models i was able (except__*Knn*__ and __*SVM*__) to use *varImp()* function and build the list of most important attributes. This list can be used as guide for patients when they need to consult doctor.
+*Rpart* method also offer interesting visualization with tree decision which allows predict probability of diabetes based on combination of symptoms.  
+
+```{r rpart_plot, message=FALSE, warning=FALSE, echo=FALSE}
+rpart.plot(model_rpart_c$finalModel)
+```
+
+Here is summary overview:
+
+```{r summary, message=FALSE, warning=FALSE, echo=FALSE}
+models_results_table
+```
+
+From this table we can see 
+Rborist was one of the slowest to calculate, all others had very similar time execution.
+
+\newpage
+
+# 3 Results
+
+The final model was build with Rborist method of caret package. __Class__ was predicted against all available attributes.
+
+```{r results, message=FALSE, warning=FALSE, echo=FALSE}
+model_rf
+```
+
+The most important attributes:
+
+```{r results_attr, message=FALSE, warning=FALSE, echo=FALSE}
+rf_plot
+```
+
+\newpage
+
+# 4 Conclusion
+
+Dataset represents a static situation; the time dimension is missing. It will be interesting to see the evolution of symptoms with time. Also we do not know which type of diabetes is involved, or it is mix.
+Dataset was not trained for all ages, i.e. it was not trained for children younger than 16.
+It will be nice to build similar decision tree for final model as for rpart model.
+
+\newpage
+
+## References
+
+Islam, MM Faniqul, et al. 'Likelihood prediction of diabetes at early stage using data mining techniques.' Computer Vision and Machine Intelligence in Medical Image Analysis. Springer, Singapore, 2020. 113-125.

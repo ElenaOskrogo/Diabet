@@ -1,0 +1,1023 @@
+# Project: Early stage diabetes risk prediction dataset.
+# Author : Elena Oskrogo
+# Harvard Edx PH125.9x Data Science: Capstone - choose your own.
+
+#load required libraries
+if(!require(tidyverse))  install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(dslabs))     install.packages("dslabs", repos = "http://cran.us.r-project.org")
+if(!require(lubridate))  install.packages("lubridate", repos = "http://cran.us.r-project.org")
+if(!require(dplyr))      install.packages("dplyr", repos = "http://cran.us.r-project.org")
+if(!require(caret))      install.packages("caret", repos = "http://cran.us.r-project.org")
+
+library(tidyverse) 
+library(dslabs)
+library(lubridate)
+library(dplyr)
+library(caret)
+library(rpart)
+library(rpart.plot)
+
+
+
+#original data source
+#https://archive.ics.uci.edu/ml/datasets/Early+stage+diabetes+risk+prediction+dataset.
+#citation Islam, MM Faniqul, et al. 'Likelihood prediction of diabetes at early stage using data mining techniques.' Computer Vision and Machine Intelligence in Medical Image Analysis. Springer, Singapore, 2020. 113-125.
+# dataset was download from UCI repository and stored in C:/Users/Elena/projects/Diabet/diabetes_data_upload.csv
+
+#read file
+filename <- "diabetes_data_upload.csv"
+wide_data <- read_csv(filename)
+
+#general dataset overview
+diabetes_dimension <- dim(wide_data)
+
+head(wide_data)
+summary(wide_data) # useful only for Age attribute
+
+# slightly re-arrange names of dataframe columns to keep them consistent, replace space by _ as has issue in one of methods
+names <- names(wide_data)
+names <- str_to_title(names)
+names <- str_replace_all(names," ","_")
+colnames(wide_data) <- names
+
+#create list of symptoms for reporting purpose
+names_bold <- paste0("__", names, "__")
+names_bold
+
+symptoms <- ""
+for (i in c(3:15)) {
+  symptoms <- paste0(symptoms, names_bold[i] , ", ")
+}
+symptoms <- paste0(symptoms, names_bold[16])
+symptoms
+
+# data review
+# find any missing values N/A and null
+wide_data %>% filter(is.na(Age)) %>% summarize(n())
+wide_data %>% filter(is.null(Age)) %>% summarize(n())
+wide_data %>% filter(is.na(Gender)) %>% summarize(n())
+wide_data %>% filter(is.null(Gender)) %>% summarize(n())
+wide_data %>% filter(is.na(Polyuria)) %>% summarize(n())
+wide_data %>% filter(is.null(Polyuria)) %>% summarize(n())
+wide_data %>% filter(is.na(Polydipsia)) %>% summarize(n())
+wide_data %>% filter(is.null(Polydipsia)) %>% summarize(n())
+wide_data %>% filter(is.na(Sudden_Weight_Loss)) %>% summarize(n())
+wide_data %>% filter(is.null(Sudden_Weight_Loss)) %>% summarize(n())
+wide_data %>% filter(is.na(Weakness)) %>% summarize(n())
+wide_data %>% filter(is.null(Weakness)) %>% summarize(n())
+wide_data %>% filter(is.na(Polyphagia)) %>% summarize(n())
+wide_data %>% filter(is.null(Polyphagia)) %>% summarize(n())
+wide_data %>% filter(is.na(Genital_Thrush)) %>% summarize(n())
+wide_data %>% filter(is.null(Genital_Thrush)) %>% summarize(n())
+wide_data %>% filter(is.na(Visual_Blurring)) %>% summarize(n())
+wide_data %>% filter(is.null(Visual_Blurring)) %>% summarize(n())
+wide_data %>% filter(is.na(Itching)) %>% summarize(n())
+wide_data %>% filter(is.null(Itching)) %>% summarize(n())
+wide_data %>% filter(is.na(Irritability)) %>% summarize(n())
+wide_data %>% filter(is.null(Irritability)) %>% summarize(n())
+wide_data %>% filter(is.na(Delayed_Healing)) %>% summarize(n())
+wide_data %>% filter(is.null(Delayed_Healing)) %>% summarize(n())
+wide_data %>% filter(is.na(Partial_Paresis)) %>% summarize(n())
+wide_data %>% filter(is.null(Partial_Paresis)) %>% summarize(n())
+wide_data %>% filter(is.na(Muscle_Stiffness)) %>% summarize(n())
+wide_data %>% filter(is.null(Muscle_Stiffness)) %>% summarize(n())
+wide_data %>% filter(is.na(Alopecia)) %>% summarize(n())
+wide_data %>% filter(is.null(Alopecia)) %>% summarize(n())
+wide_data %>% filter(is.na(Obesity)) %>% summarize(n())
+wide_data %>% filter(is.null(Obesity)) %>% summarize(n())
+wide_data %>% filter(is.na(Class)) %>% summarize(n())
+wide_data %>% filter(is.null(Class)) %>% summarize(n())
+
+# check if we have any unexpected or impossible values, normally not needed as this is data frame
+wide_data %>% filter(!is.numeric(Age)) %>% summarize(n())
+wide_data %>% filter(!is.character(Gender)) %>% summarize(n())
+wide_data %>% filter(!is.character(Polyuria)) %>% summarize(n())
+wide_data %>% filter(!is.character(Polydipsia)) %>% summarize(n())
+wide_data %>% filter(!is.character(Sudden_Weight_Loss)) %>% summarize(n())
+wide_data %>% filter(!is.character(Weakness)) %>% summarize(n())
+wide_data %>% filter(!is.character(Polyphagia)) %>% summarize(n())
+wide_data %>% filter(!is.character(Genital_Thrush)) %>% summarize(n())
+wide_data %>% filter(!is.character(Visual_Blurring)) %>% summarize(n())
+wide_data %>% filter(!is.character(Itching)) %>% summarize(n())
+wide_data %>% filter(!is.character(Irritability)) %>% summarize(n())
+wide_data %>% filter(!is.character(Delayed_Healing)) %>% summarize(n())
+wide_data %>% filter(!is.character(Partial_Paresis)) %>% summarize(n())
+wide_data %>% filter(!is.character(Muscle_Stiffness)) %>% summarize(n())
+wide_data %>% filter(!is.character(Alopecia)) %>% summarize(n())
+wide_data %>% filter(!is.character(Obesity)) %>% summarize(n())
+wide_data %>% filter(!is.character(Class)) %>% summarize(n())
+
+#verify if all data values are as expected - @male' or @Female' for Gender, 'Positive' or 'Negative' for Class, Yes or No for sympthoms
+wide_data %>% filter(Age <=0 | Age >= 120) %>% summarize(n()) # same results will be available in summary() function
+wide_data %>% filter(!(Gender %in% c('Male', 'Female'))) %>% summarize(n())
+wide_data %>% filter(!(Class %in% c('Positive', 'Negative'))) %>% summarize(n())
+wide_data %>% filter(!(Polyuria  %in% c('Yes','No'))) %>% summarize(n())
+wide_data %>% filter(!(Polydipsia %in% c('Yes','No'))) %>% summarize(n())
+wide_data %>% filter(!(Sudden_Weight_Loss %in% c('Yes','No'))) %>% summarize(n())
+wide_data %>% filter(!(Weakness %in% c('Yes','No'))) %>% summarize(n())
+wide_data %>% filter(!(Genital_Thrush %in% c('Yes','No'))) %>% summarize(n())
+wide_data %>% filter(!(Visual_Blurring %in% c('Yes','No'))) %>% summarize(n())
+wide_data %>% filter(!(Itching %in% c('Yes','No'))) %>% summarize(n())
+wide_data %>% filter(!(Irritability %in% c('Yes','No'))) %>% summarize(n())
+wide_data %>% filter(!(Delayed_Healing %in% c('Yes','No'))) %>% summarize(n())
+wide_data %>% filter(!(Partial_Paresis %in% c('Yes','No'))) %>% summarize(n())
+wide_data %>% filter(!(Muscle_Stiffness %in% c('Yes','No'))) %>% summarize(n())
+wide_data %>% filter(!(Alopecia %in% c('Yes','No'))) %>% summarize(n())
+wide_data %>% filter(!(Obesity %in% c('Yes','No'))) %>% summarize(n())
+
+
+# individual attributes review
+# prepare variable for visualization
+color <- scale_fill_manual(breaks=c("Negative","Positive"), values=c("blue","red"))
+color_s <- scale_fill_manual(breaks=c("No","Yes"), values=c("blue","red"))
+title_part <-  labs(title = "Diagnostic with highlithed symptom" , x="Diabetes diagnostic")
+# review Class
+gg_class <- wide_data %>% ggplot(aes(Class)) + geom_bar() + ggtitle("Split class diagnosis")
+
+class_pos <- wide_data %>% filter(Class == 'Positive') %>% summarize(count = n())
+class_neg <- wide_data %>% filter(Class == 'Negative') %>% summarize(count = n())
+
+# review Age
+summary(wide_data$Age)
+
+# various visualization of Age
+boxplot(wide_data$Age)
+wide_data %>% ggplot(aes(Age)) + geom_boxplot()
+gg_age <- wide_data %>% ggplot(aes(Age)) + geom_bar() + ggtitle("Age distribution") # choose this one for report
+
+# review Gender
+gg_gender <- wide_data %>% ggplot(aes(Gender)) + geom_bar() + ggtitle("Gender distribution")
+
+
+#various demographic visualization
+wide_data %>% ggplot(aes(Age, fill=Class)) + geom_bar() + color
+gg_demo <-   wide_data %>% ggplot(aes(Age)) + geom_bar() + facet_grid(Class ~ Gender)  + ggtitle("Split by Age/ Gender") #choose this one for report
+wide_data %>% ggplot(aes(Gender)) + geom_bar(aes(fill=Class)) + color
+wide_data %>% ggplot(aes(Gender)) + geom_bar() + facet_grid(. ~ Class) 
+
+#symptoms/class visualization 
+gg_polu_g <- wide_data %>% ggplot(aes(Polyuria)) + geom_bar(aes(fill=Class)) + facet_grid(. ~ Gender) + color #choose for report
+gg_polu <- wide_data %>% ggplot(aes(Polyuria)) + geom_bar(aes(fill=Class)) + color                            #choose for report
+gg_c_polu <- wide_data %>% ggplot(aes(Class)) + geom_bar(aes(fill=Polyuria)) + color_s + title_part           #choose for report
+wide_data %>% ggplot(aes(Polydipsia)) + geom_bar(aes(fill=Class)) + facet_grid(. ~ Gender) + color 
+wide_data %>% ggplot(aes(Polydipsia)) + geom_bar(aes(fill=Class)) + color
+wide_data %>% ggplot(aes(Class)) + geom_bar(aes(fill=Polydipsia)) + color_s + title_part
+wide_data %>% ggplot(aes(Sudden_Weight_Loss)) + geom_bar(aes(fill=Class)) + facet_grid(. ~ Gender)+ color
+wide_data %>% ggplot(aes(Sudden_Weight_Loss)) + geom_bar(aes(fill=Class))+ color
+wide_data %>% ggplot(aes(Class)) + geom_bar(aes(fill=Sudden_Weight_Loss)) + color_s + title_part
+wide_data %>% ggplot(aes(Weakness)) + geom_bar(aes(fill=Class)) + facet_grid(. ~ Gender)+ color
+gg_weak <- wide_data %>% ggplot(aes(Weakness)) + geom_bar(aes(fill=Class))+ color                             #choose for report
+wide_data %>% ggplot(aes(Class)) + geom_bar(aes(fill=Weakness)) + color_s + title_part
+wide_data %>% ggplot(aes(Polyphagia)) + geom_bar(aes(fill=Class)) + facet_grid(. ~ Gender)+ color
+wide_data %>% ggplot(aes(Polyphagia)) + geom_bar(aes(fill=Class))+ color
+wide_data %>% ggplot(aes(Class)) + geom_bar(aes(fill=Polyphagia)) + color_s + title_part
+wide_data %>% ggplot(aes(Genital_Thrush)) + geom_bar(aes(fill=Class)) + facet_grid(. ~ Gender)+ color
+wide_data %>% ggplot(aes(Genital_Thrush)) + geom_bar(aes(fill=Class))+ color
+wide_data %>% ggplot(aes(Class)) + geom_bar(aes(fill=Genital_Thrush)) + color_s + title_part
+wide_data %>% ggplot(aes(Visual_Blurring)) + geom_bar(aes(fill=Class)) + facet_grid(. ~ Gender)+ color
+wide_data %>% ggplot(aes(Visual_Blurring)) + geom_bar(aes(fill=Class))+ color
+wide_data %>% ggplot(aes(Class)) + geom_bar(aes(fill=Visual_Blurring)) + color_s + title_part
+wide_data %>% ggplot(aes(Itching)) + geom_bar(aes(fill=Class)) + facet_grid(. ~ Gender)+ color
+wide_data %>% ggplot(aes(Itching)) + geom_bar(aes(fill=Class))+ color
+wide_data %>% ggplot(aes(Class)) + geom_bar(aes(fill=Itching)) + color_s + title_part
+wide_data %>% ggplot(aes(Irritability)) + geom_bar(aes(fill=Class)) + facet_grid(. ~ Gender)+ color
+wide_data %>% ggplot(aes(Irritability)) + geom_bar(aes(fill=Class))+ color
+wide_data %>% ggplot(aes(Class)) + geom_bar(aes(fill=Irritability)) + color_s + title_part
+wide_data %>% ggplot(aes(Delayed_Healing)) + geom_bar(aes(fill=Class)) + facet_grid(. ~ Gender)+ color
+wide_data %>% ggplot(aes(Delayed_Healing)) + geom_bar(aes(fill=Class))+ color
+wide_data %>% ggplot(aes(Class)) + geom_bar(aes(fill=Delayed_Healing)) + color_s + title_part
+wide_data %>% ggplot(aes(Partial_Paresis)) + geom_bar(aes(fill=Class)) + facet_grid(. ~ Gender)+ color
+wide_data %>% ggplot(aes(Partial_Paresis)) + geom_bar(aes(fill=Class))+ color
+wide_data %>% ggplot(aes(Class)) + geom_bar(aes(fill=Delayed_Healing)) + color_s + title_part
+wide_data %>% ggplot(aes(Muscle_Stiffness)) + geom_bar(aes(fill=Class)) + facet_grid(. ~ Gender)+ color
+wide_data %>% ggplot(aes(Muscle_Stiffness)) + geom_bar(aes(fill=Class))+ color
+wide_data %>% ggplot(aes(Class)) + geom_bar(aes(fill=Muscle_Stiffness)) + color_s + title_part
+gg_a_g <- wide_data %>% ggplot(aes(Alopecia)) + geom_bar(aes(fill=Class)) + facet_grid(. ~ Gender)+ color      #choose for report
+wide_data %>% ggplot(aes(Alopecia)) + geom_bar(aes(fill=Class))+ color                                         
+gg_c_a <- wide_data %>% ggplot(aes(Class)) + geom_bar(aes(fill=Alopecia)) + color_s + title_part               #choose for report
+gg_o_g <- wide_data %>% ggplot(aes(Obesity)) + geom_bar(aes(fill=Class)) + facet_grid(. ~ Gender)+ color       #choose for report
+gg_o <- wide_data %>% ggplot(aes(Obesity)) + geom_bar(aes(fill=Class))+ color                                  #choose for report
+gg_c_o <- wide_data %>% ggplot(aes(Class)) + geom_bar(aes(fill=Obesity)) + color_s + title_part                #choose for report
+
+
+
+#estimate importance of attributes
+
+#as Age is numeric value used Anova for importance estimation
+Age_res <- aov(Age ~ Class, data = wide_data)            #Age is significant
+summary(Age_res)
+
+# check Age dependency versus others attributes
+aov_tot_s <- summary(aov(Age ~ Gender + Polyuria + Polydipsia + Sudden_Weight_Loss + Weakness + Polyphagia + Genital_Thrush +
+                           Visual_Blurring + Itching + Irritability + Delayed_Healing + Partial_Paresis +
+                           Muscle_Stiffness + Alopecia + Obesity,  data = wide_data)) 
+aov_tot_s
+
+# Gender significance
+Gender_chi <- chisq.test(wide_data$Gender, wide_data$Class, correct=FALSE)
+Gender_chi
+Gender_chi$residuals
+
+#evaluate importance for each symptoms
+Sympthom <- "Gender"
+PVal <- round(Gender_chi$p.value, digits = 4) #add all chi test for symptoms ~ class to new Sympthom & PVal
+PolyU_chi <- chisq.test(wide_data$Polyuria, wide_data$Class, correct=FALSE)
+Sympthom <- append(Sympthom, "PolyUria")
+PVal <- append(PVal, round(PolyU_chi$p.value, digits = 4))
+
+
+
+# use Chi-squared test for categorical variables
+Alopecia_chi <- chisq.test(wide_data$Alopecia, wide_data$Class, correct=FALSE)
+Sympthom <- append(Sympthom, "Alopecia")
+PVal <- append(PVal, round(Alopecia_chi$p.value, digits = 4))
+Obesity_chi <-chisq.test(wide_data$Obesity, wide_data$Class, correct=FALSE)
+Sympthom <- append(Sympthom, "Obesity")
+PVal <- append(PVal, round(Obesity_chi$p.value, digits = 4))
+Sudden_Weight_Loss_chi <- chisq.test(wide_data$Sudden_Weight_Loss, wide_data$Class, correct=FALSE)
+Sympthom <- append(Sympthom, "Sudden_Weight_Loss")
+PVal <- append(PVal, round(Sudden_Weight_Loss_chi$p.value, digits = 4))
+Irritability_chi <- chisq.test(wide_data$Irritability, wide_data$Class, correct=FALSE)
+Sympthom <- append(Sympthom, "Irritability")
+PVal <- append(PVal, round(Irritability_chi$p.value, digits = 4))
+Itching_chi <- chisq.test(wide_data$Itching, wide_data$Class, correct=FALSE)
+Sympthom <- append(Sympthom, "Itching")
+PVal <- append(PVal, round(Itching_chi$p.value, digits = 4))
+Polydipsia_chi <- chisq.test(wide_data$Polydipsia, wide_data$Class, correct=FALSE)
+Sympthom <- append(Sympthom, "Polydipsia")
+PVal <- append(PVal, round(Polydipsia_chi$p.value, digits = 4))
+Weakness_chi <- chisq.test(wide_data$Weakness, wide_data$Class, correct=FALSE)
+Sympthom <- append(Sympthom, "Weakness")
+PVal <- append(PVal, round(Weakness_chi$p.value, digits = 4))
+Polyphagia_chi <- chisq.test(wide_data$Polyphagia, wide_data$Class, correct=FALSE)
+Sympthom <- append(Sympthom, "Polyphagia")
+PVal <- append(PVal, round(Polyphagia_chi$p.value, digits = 4))
+Genital_Thrush_chi <- chisq.test(wide_data$Genital_Thrush, wide_data$Class, correct=FALSE)
+Sympthom <- append(Sympthom, "Genital_Thrush")
+PVal <- append(PVal, round(Genital_Thrush_chi$p.value, digits = 4))
+Visual_Blurring_chi <- chisq.test(wide_data$Visual_Blurring, wide_data$Class, correct=FALSE)
+Sympthom <- append(Sympthom, "Visual_Blurring")
+PVal <- append(PVal, round(Visual_Blurring_chi$p.value, digits = 4))
+Delayed_Healing_chi <- chisq.test(wide_data$Delayed_Healing, wide_data$Class, correct=FALSE)
+Sympthom <- append(Sympthom, "Delayed_Healing")
+PVal <- append(PVal, round(Delayed_Healing_chi$p.value, digits = 4))
+Partial_Paresis_chi <- chisq.test(wide_data$Partial_Paresis, wide_data$Class, correct=FALSE)
+Sympthom <- append(Sympthom, "Partial_Paresis")
+PVal <- append(PVal, round(Partial_Paresis_chi$p.value, digits = 4))
+Muscle_Stiffness_chi <- chisq.test(wide_data$Muscle_Stiffness, wide_data$Class, correct=FALSE)
+Sympthom <- append(Sympthom, "Muscle_Stiffness")
+PVal <- append(PVal, round(Muscle_Stiffness_chi$p.value, digits = 4))
+
+Sympthom
+PVal
+df_features <- data_frame(Sympthom, PVal) #create dataframe with results of chi test for symptoms ~ Class
+
+
+df_features_s <- df_features %>% filter(PVal < 0.05)      #significant one
+df_features_ns <- df_features %>% filter(PVal >= 0.05)    
+
+
+#check significance for Gender versus others (agree this is not the most elegant code)
+col1 <- 'G'
+col2 <- 'PolyU'
+col3 <- round(chisq.test(wide_data$Gender, wide_data$Polyuria, correct=FALSE)$p.value, digits = 4)
+col1 <- append(col1,'G')
+col2 <- append(col2,'PolyD')
+col3 <- append(col3, round(chisq.test(wide_data$Gender, wide_data$Polydipsia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'G')
+col2 <- append(col2,'SWL')
+col3 <- append(col3, round(chisq.test(wide_data$Gender, wide_data$Sudden_Weight_Loss, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'G')
+col2 <- append(col2,'W')
+col3 <- append(col3, round(chisq.test(wide_data$Gender, wide_data$Weakness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'G')
+col2 <- append(col2,'PolyP')
+col3 <- append(col3, round(chisq.test(wide_data$Gender, wide_data$Polyphagia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'G')
+col2 <- append(col2,'GT')
+col3 <- append(col3, round(chisq.test(wide_data$Gender, wide_data$Genital_Thrush, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'G')
+col2 <- append(col2,'VB')
+col3 <- append(col3, round(chisq.test(wide_data$Gender, wide_data$Visual_Blurring, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'G')
+col2 <- append(col2,'It')
+col3 <- append(col3, round(chisq.test(wide_data$Gender, wide_data$Itching, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'G')
+col2 <- append(col2,'Ir')
+col3 <- append(col3, round(chisq.test(wide_data$Gender, wide_data$Irritability, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'G')
+col2 <- append(col2,'DH')
+col3 <- append(col3, round(chisq.test(wide_data$Gender, wide_data$Delayed_Healing, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'G')
+col2 <- append(col2,'PartP')
+col3 <- append(col3, round(chisq.test(wide_data$Gender, wide_data$Partial_Paresis, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'G')
+col2 <- append(col2,'MS')
+col3 <- append(col3, round(chisq.test(wide_data$Gender, wide_data$Muscle_Stiffness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'G')
+col2 <- append(col2,'A')
+col3 <- append(col3, round(chisq.test(wide_data$Gender, wide_data$Alopecia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'G')
+col2 <- append(col2,'O')
+col3 <- append(col3, round(chisq.test(wide_data$Gender, wide_data$Obesity, correct=FALSE)$p.value, digits = 4))
+#same for others symptoms            
+#Polyuria
+col1 <- append(col1,'PolyU')
+col2 <- append(col2,'G')
+col3 <- append(col3,round(chisq.test(wide_data$Polyuria, wide_data$Gender, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyU')
+col2 <- append(col2,'PolyD')
+col3 <- append(col3, round(chisq.test(wide_data$Polyuria, wide_data$Polydipsia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyU')
+col2 <- append(col2,'SWL')
+col3 <- append(col3, round(chisq.test(wide_data$Polyuria, wide_data$Sudden_Weight_Loss, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyU')
+col2 <- append(col2,'W')
+col3 <- append(col3, round(chisq.test(wide_data$Polyuria, wide_data$Weakness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyU')
+col2 <- append(col2,'PolyP')
+col3 <- append(col3, round(chisq.test(wide_data$Polyuria, wide_data$Polyphagia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyU')
+col2 <- append(col2,'GT')
+col3 <- append(col3, round(chisq.test(wide_data$Polyuria, wide_data$Genital_Thrush, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyU')
+col2 <- append(col2,'VB')
+col3 <- append(col3, round(chisq.test(wide_data$Polyuria, wide_data$Visual_Blurring, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyU')
+col2 <- append(col2,'It')
+col3 <- append(col3, round(chisq.test(wide_data$Polyuria, wide_data$Itching, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyU')
+col2 <- append(col2,'Ir')
+col3 <- append(col3, round(chisq.test(wide_data$Polyuria, wide_data$Irritability, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyU')
+col2 <- append(col2,'DH')
+col3 <- append(col3, round(chisq.test(wide_data$Polyuria, wide_data$Delayed_Healing, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyU')
+col2 <- append(col2,'PartP')
+col3 <- append(col3, round(chisq.test(wide_data$Polyuria, wide_data$Partial_Paresis, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyU')
+col2 <- append(col2,'MS')
+col3 <- append(col3, round(chisq.test(wide_data$Polyuria, wide_data$Muscle_Stiffness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyU')
+col2 <- append(col2,'A')
+col3 <- append(col3, round(chisq.test(wide_data$Polyuria, wide_data$Alopecia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyU')
+col2 <- append(col2,'O')
+col3 <- append(col3, round(chisq.test(wide_data$Polyuria, wide_data$Obesity, correct=FALSE)$p.value, digits = 4))
+#Polydipsia
+col1 <- append(col1,'PolyD')
+col2 <- append(col2,'G')
+col3 <- append(col3,round(chisq.test(wide_data$Polydipsia, wide_data$Gender, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyD')
+col2 <- append(col2,'PolyU')
+col3 <- append(col3, round(chisq.test(wide_data$Polydipsia, wide_data$Polyuria, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyD')
+col2 <- append(col2,'SWL')
+col3 <- append(col3, round(chisq.test(wide_data$Polydipsia, wide_data$Sudden_Weight_Loss, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyD')
+col2 <- append(col2,'W')
+col3 <- append(col3, round(chisq.test(wide_data$Polydipsia, wide_data$Weakness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyD')
+col2 <- append(col2,'PolyP')
+col3 <- append(col3, round(chisq.test(wide_data$Polydipsia, wide_data$Polyphagia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyD')
+col2 <- append(col2,'GT')
+col3 <- append(col3, round(chisq.test(wide_data$Polydipsia, wide_data$Genital_Thrush, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyD')
+col2 <- append(col2,'VB')
+col3 <- append(col3, round(chisq.test(wide_data$Polydipsia, wide_data$Visual_Blurring, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyD')
+col2 <- append(col2,'It')
+col3 <- append(col3, round(chisq.test(wide_data$Polydipsia, wide_data$Itching, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyD')
+col2 <- append(col2,'Ir')
+col3 <- append(col3, round(chisq.test(wide_data$Polydipsia, wide_data$Irritability, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyD')
+col2 <- append(col2,'DH')
+col3 <- append(col3, round(chisq.test(wide_data$Polydipsia, wide_data$Delayed_Healing, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyD')
+col2 <- append(col2,'PartP')
+col3 <- append(col3, round(chisq.test(wide_data$Polydipsia, wide_data$Partial_Paresis, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyD')
+col2 <- append(col2,'MS')
+col3 <- append(col3, round(chisq.test(wide_data$Polydipsia, wide_data$Muscle_Stiffness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyD')
+col2 <- append(col2,'A')
+col3 <- append(col3, round(chisq.test(wide_data$Polydipsia, wide_data$Alopecia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyD')
+col2 <- append(col2,'O')
+col3 <- append(col3, round(chisq.test(wide_data$Polydipsia, wide_data$Obesity, correct=FALSE)$p.value, digits = 4))
+#Sudden Weight Loss
+col1 <- append(col1,'SWL')
+col2 <- append(col2,'G')
+col3 <- append(col3,round(chisq.test(wide_data$Sudden_Weight_Loss, wide_data$Gender, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'SWL')
+col2 <- append(col2,'PolyU')
+col3 <- append(col3, round(chisq.test(wide_data$Sudden_Weight_Loss, wide_data$Polyuria, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'SWL')
+col2 <- append(col2,'PolyD')
+col3 <- append(col3, round(chisq.test(wide_data$Sudden_Weight_Loss, wide_data$Polydipsia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'SWL')
+col2 <- append(col2,'W')
+col3 <- append(col3, round(chisq.test(wide_data$Sudden_Weight_Loss, wide_data$Weakness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'SWL')
+col2 <- append(col2,'PolyP')
+col3 <- append(col3, round(chisq.test(wide_data$Sudden_Weight_Loss, wide_data$Polyphagia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'SWL')
+col2 <- append(col2,'GT')
+col3 <- append(col3, round(chisq.test(wide_data$Sudden_Weight_Loss, wide_data$Genital_Thrush, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'SWL')
+col2 <- append(col2,'VB')
+col3 <- append(col3, round(chisq.test(wide_data$Sudden_Weight_Loss, wide_data$Visual_Blurring, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'SWL')
+col2 <- append(col2,'It')
+col3 <- append(col3, round(chisq.test(wide_data$Sudden_Weight_Loss, wide_data$Itching, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'SWL')
+col2 <- append(col2,'Ir')
+col3 <- append(col3, round(chisq.test(wide_data$Sudden_Weight_Loss, wide_data$Irritability, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'SWL')
+col2 <- append(col2,'DH')
+col3 <- append(col3, round(chisq.test(wide_data$Sudden_Weight_Loss, wide_data$Delayed_Healing, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'SWL')
+col2 <- append(col2,'PartP')
+col3 <- append(col3, round(chisq.test(wide_data$Sudden_Weight_Loss, wide_data$Partial_Paresis, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'SWL')
+col2 <- append(col2,'MS')
+col3 <- append(col3, round(chisq.test(wide_data$Sudden_Weight_Loss, wide_data$Muscle_Stiffness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'SWL')
+col2 <- append(col2,'A')
+col3 <- append(col3, round(chisq.test(wide_data$Sudden_Weight_Loss, wide_data$Alopecia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'SWL')
+col2 <- append(col2,'O')
+col3 <- append(col3, round(chisq.test(wide_data$Sudden_Weight_Loss, wide_data$Obesity, correct=FALSE)$p.value, digits = 4))
+#Polyphagia
+col1 <- append(col1,'PolyP')
+col2 <- append(col2,'G')
+col3 <- append(col3,round(chisq.test(wide_data$Polyphagia, wide_data$Gender, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyP')
+col2 <- append(col2,'PolyU')
+col3 <- append(col3, round(chisq.test(wide_data$Polyphagia, wide_data$Polyuria, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyP')
+col2 <- append(col2,'PolyD')
+col3 <- append(col3, round(chisq.test(wide_data$Polyphagia, wide_data$Polydipsia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyP')
+col2 <- append(col2,'W')
+col3 <- append(col3, round(chisq.test(wide_data$Polyphagia, wide_data$Weakness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyP')
+col2 <- append(col2,'SWL')
+col3 <- append(col3, round(chisq.test(wide_data$Polyphagia, wide_data$Sudden_Weight_Loss, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyP')
+col2 <- append(col2,'GT')
+col3 <- append(col3, round(chisq.test(wide_data$Polyphagia, wide_data$Genital_Thrush, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyP')
+col2 <- append(col2,'VB')
+col3 <- append(col3, round(chisq.test(wide_data$Polyphagia, wide_data$Visual_Blurring, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyP')
+col2 <- append(col2,'It')
+col3 <- append(col3, round(chisq.test(wide_data$Polyphagia, wide_data$Itching, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyP')
+col2 <- append(col2,'Ir')
+col3 <- append(col3, round(chisq.test(wide_data$Polyphagia, wide_data$Irritability, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyP')
+col2 <- append(col2,'DH')
+col3 <- append(col3, round(chisq.test(wide_data$Polyphagia, wide_data$Delayed_Healing, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyP')
+col2 <- append(col2,'PartP')
+col3 <- append(col3, round(chisq.test(wide_data$Polyphagia, wide_data$Partial_Paresis, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyP')
+col2 <- append(col2,'MS')
+col3 <- append(col3, round(chisq.test(wide_data$Polyphagia, wide_data$Muscle_Stiffness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyP')
+col2 <- append(col2,'A')
+col3 <- append(col3, round(chisq.test(wide_data$Polyphagia, wide_data$Alopecia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PolyP')
+col2 <- append(col2,'O')
+col3 <- append(col3, round(chisq.test(wide_data$Polyphagia, wide_data$Obesity, correct=FALSE)$p.value, digits = 4))
+#Genital Thrush
+col1 <- append(col1,'GT')
+col2 <- append(col2,'G')
+col3 <- append(col3,round(chisq.test(wide_data$Genital_Thrush, wide_data$Gender, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'GT')
+col2 <- append(col2,'PolyU')
+col3 <- append(col3, round(chisq.test(wide_data$Genital_Thrush, wide_data$Polyuria, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'GT')
+col2 <- append(col2,'PolyD')
+col3 <- append(col3, round(chisq.test(wide_data$Genital_Thrush, wide_data$Polydipsia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'GT')
+col2 <- append(col2,'W')
+col3 <- append(col3, round(chisq.test(wide_data$Genital_Thrush, wide_data$Weakness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'GT')
+col2 <- append(col2,'SWL')
+col3 <- append(col3, round(chisq.test(wide_data$Genital_Thrush, wide_data$Sudden_Weight_Loss, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'GT')
+col2 <- append(col2,'PolyP')
+col3 <- append(col3, round(chisq.test(wide_data$Genital_Thrush, wide_data$Polyphagia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'GT')
+col2 <- append(col2,'VB')
+col3 <- append(col3, round(chisq.test(wide_data$Genital_Thrush, wide_data$Visual_Blurring, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'GT')
+col2 <- append(col2,'It')
+col3 <- append(col3, round(chisq.test(wide_data$Genital_Thrush, wide_data$Itching, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'GT')
+col2 <- append(col2,'Ir')
+col3 <- append(col3, round(chisq.test(wide_data$Genital_Thrush, wide_data$Irritability, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'GT')
+col2 <- append(col2,'DH')
+col3 <- append(col3, round(chisq.test(wide_data$Genital_Thrush, wide_data$Delayed_Healing, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'GT')
+col2 <- append(col2,'PartP')
+col3 <- append(col3, round(chisq.test(wide_data$Genital_Thrush, wide_data$Partial_Paresis, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'GT')
+col2 <- append(col2,'MS')
+col3 <- append(col3, round(chisq.test(wide_data$Genital_Thrush, wide_data$Muscle_Stiffness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'GT')
+col2 <- append(col2,'A')
+col3 <- append(col3, round(chisq.test(wide_data$Genital_Thrush, wide_data$Alopecia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'GT')
+col2 <- append(col2,'O')
+col3 <- append(col3, round(chisq.test(wide_data$Genital_Thrush, wide_data$Obesity, correct=FALSE)$p.value, digits = 4))
+#Visual Blurring
+col1 <- append(col1,'VB')
+col2 <- append(col2,'G')
+col3 <- append(col3,round(chisq.test(wide_data$Visual_Blurring, wide_data$Gender, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'VB')
+col2 <- append(col2,'PolyU')
+col3 <- append(col3, round(chisq.test(wide_data$Visual_Blurring, wide_data$Polyuria, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'VB')
+col2 <- append(col2,'PolyD')
+col3 <- append(col3, round(chisq.test(wide_data$Visual_Blurring, wide_data$Polydipsia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'VB')
+col2 <- append(col2,'W')
+col3 <- append(col3, round(chisq.test(wide_data$Visual_Blurring, wide_data$Weakness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'VB')
+col2 <- append(col2,'SWL')
+col3 <- append(col3, round(chisq.test(wide_data$Visual_Blurring, wide_data$Sudden_Weight_Loss, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'VB')
+col2 <- append(col2,'PolyP')
+col3 <- append(col3, round(chisq.test(wide_data$Visual_Blurring, wide_data$Polyphagia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'VB')
+col2 <- append(col2,'GT')
+col3 <- append(col3, round(chisq.test(wide_data$Visual_Blurring, wide_data$Genital_Thrush, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'VB')
+col2 <- append(col2,'It')
+col3 <- append(col3, round(chisq.test(wide_data$Visual_Blurring, wide_data$Itching, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'VB')
+col2 <- append(col2,'Ir')
+col3 <- append(col3, round(chisq.test(wide_data$Visual_Blurring, wide_data$Irritability, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'VB')
+col2 <- append(col2,'DH')
+col3 <- append(col3, round(chisq.test(wide_data$Visual_Blurring, wide_data$Delayed_Healing, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'VB')
+col2 <- append(col2,'PartP')
+col3 <- append(col3, round(chisq.test(wide_data$Visual_Blurring, wide_data$Partial_Paresis, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'VB')
+col2 <- append(col2,'MS')
+col3 <- append(col3, round(chisq.test(wide_data$Visual_Blurring, wide_data$Muscle_Stiffness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'VB')
+col2 <- append(col2,'A')
+col3 <- append(col3, round(chisq.test(wide_data$Visual_Blurring, wide_data$Alopecia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'VB')
+col2 <- append(col2,'O')
+col3 <- append(col3, round(chisq.test(wide_data$Visual_Blurring, wide_data$Obesity, correct=FALSE)$p.value, digits = 4))
+#Itching
+col1 <- append(col1,'It')
+col2 <- append(col2,'G')
+col3 <- append(col3,round(chisq.test(wide_data$Itching, wide_data$Gender, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'It')
+col2 <- append(col2,'PolyU')
+col3 <- append(col3, round(chisq.test(wide_data$Itching, wide_data$Polyuria, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'It')
+col2 <- append(col2,'PolyD')
+col3 <- append(col3, round(chisq.test(wide_data$Itching, wide_data$Polydipsia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'It')
+col2 <- append(col2,'W')
+col3 <- append(col3, round(chisq.test(wide_data$Itching, wide_data$Weakness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'It')
+col2 <- append(col2,'SWL')
+col3 <- append(col3, round(chisq.test(wide_data$Itching, wide_data$Sudden_Weight_Loss, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'It')
+col2 <- append(col2,'PolyP')
+col3 <- append(col3, round(chisq.test(wide_data$Itching, wide_data$Polyphagia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'It')
+col2 <- append(col2,'GT')
+col3 <- append(col3, round(chisq.test(wide_data$Itching, wide_data$Genital_Thrush, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'It')
+col2 <- append(col2,'VB')
+col3 <- append(col3, round(chisq.test(wide_data$Itching, wide_data$Visual_Blurring, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'It')
+col2 <- append(col2,'Ir')
+col3 <- append(col3, round(chisq.test(wide_data$Itching, wide_data$Irritability, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'It')
+col2 <- append(col2,'DH')
+col3 <- append(col3, round(chisq.test(wide_data$Itching, wide_data$Delayed_Healing, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'It')
+col2 <- append(col2,'PartP')
+col3 <- append(col3, round(chisq.test(wide_data$Itching, wide_data$Partial_Paresis, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'It')
+col2 <- append(col2,'MS')
+col3 <- append(col3, round(chisq.test(wide_data$Itching, wide_data$Muscle_Stiffness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'It')
+col2 <- append(col2,'A')
+col3 <- append(col3, round(chisq.test(wide_data$Itching, wide_data$Alopecia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'It')
+col2 <- append(col2,'O')
+col3 <- append(col3, round(chisq.test(wide_data$Itching, wide_data$Obesity, correct=FALSE)$p.value, digits = 4))
+#Irritability
+col1 <- append(col1,'Ir')
+col2 <- append(col2,'G')
+col3 <- append(col3,round(chisq.test(wide_data$Irritability, wide_data$Gender, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'Ir')
+col2 <- append(col2,'PolyU')
+col3 <- append(col3, round(chisq.test(wide_data$Irritability, wide_data$Polyuria, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'Ir')
+col2 <- append(col2,'PolyD')
+col3 <- append(col3, round(chisq.test(wide_data$Irritability, wide_data$Polydipsia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'Ir')
+col2 <- append(col2,'W')
+col3 <- append(col3, round(chisq.test(wide_data$Irritability, wide_data$Weakness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'Ir')
+col2 <- append(col2,'SWL')
+col3 <- append(col3, round(chisq.test(wide_data$Irritability, wide_data$Sudden_Weight_Loss, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'Ir')
+col2 <- append(col2,'PolyP')
+col3 <- append(col3, round(chisq.test(wide_data$Irritability, wide_data$Polyphagia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'Ir')
+col2 <- append(col2,'GT')
+col3 <- append(col3, round(chisq.test(wide_data$Irritability, wide_data$Genital_Thrush, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'Ir')
+col2 <- append(col2,'VB')
+col3 <- append(col3, round(chisq.test(wide_data$Irritability, wide_data$Visual_Blurring, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'Ir')
+col2 <- append(col2,'It')
+col3 <- append(col3, round(chisq.test(wide_data$Irritability, wide_data$Itching, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'Ir')
+col2 <- append(col2,'DH')
+col3 <- append(col3, round(chisq.test(wide_data$Irritability, wide_data$Delayed_Healing, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'Ir')
+col2 <- append(col2,'PartP')
+col3 <- append(col3, round(chisq.test(wide_data$Irritability, wide_data$Partial_Paresis, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'Ir')
+col2 <- append(col2,'MS')
+col3 <- append(col3, round(chisq.test(wide_data$Irritability, wide_data$Muscle_Stiffness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'Ir')
+col2 <- append(col2,'A')
+col3 <- append(col3, round(chisq.test(wide_data$Irritability, wide_data$Alopecia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'Ir')
+col2 <- append(col2,'O')
+col3 <- append(col3, round(chisq.test(wide_data$Irritability, wide_data$Obesity, correct=FALSE)$p.value, digits = 4))
+#Delayed Healing
+col1 <- append(col1,'DH')
+col2 <- append(col2,'G')
+col3 <- append(col3,round(chisq.test(wide_data$Delayed_Healing, wide_data$Gender, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'DH')
+col2 <- append(col2,'PolyU')
+col3 <- append(col3, round(chisq.test(wide_data$Delayed_Healing, wide_data$Polyuria, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'DH')
+col2 <- append(col2,'PolyD')
+col3 <- append(col3, round(chisq.test(wide_data$Delayed_Healing, wide_data$Polydipsia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'DH')
+col2 <- append(col2,'W')
+col3 <- append(col3, round(chisq.test(wide_data$Delayed_Healing, wide_data$Weakness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'DH')
+col2 <- append(col2,'SWL')
+col3 <- append(col3, round(chisq.test(wide_data$Delayed_Healing, wide_data$Sudden_Weight_Loss, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'DH')
+col2 <- append(col2,'PolyP')
+col3 <- append(col3, round(chisq.test(wide_data$Delayed_Healing, wide_data$Polyphagia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'DH')
+col2 <- append(col2,'GT')
+col3 <- append(col3, round(chisq.test(wide_data$Delayed_Healing, wide_data$Genital_Thrush, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'DH')
+col2 <- append(col2,'VB')
+col3 <- append(col3, round(chisq.test(wide_data$Delayed_Healing, wide_data$Visual_Blurring, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'DH')
+col2 <- append(col2,'It')
+col3 <- append(col3, round(chisq.test(wide_data$Delayed_Healing, wide_data$Itching, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'DH')
+col2 <- append(col2,'Ir')
+col3 <- append(col3, round(chisq.test(wide_data$Delayed_Healing, wide_data$Irritability, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'DH')
+col2 <- append(col2,'PartP')
+col3 <- append(col3, round(chisq.test(wide_data$Delayed_Healing, wide_data$Partial_Paresis, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'DH')
+col2 <- append(col2,'MS')
+col3 <- append(col3, round(chisq.test(wide_data$Delayed_Healing, wide_data$Muscle_Stiffness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'DH')
+col2 <- append(col2,'A')
+col3 <- append(col3, round(chisq.test(wide_data$Delayed_Healing, wide_data$Alopecia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'DH')
+col2 <- append(col2,'O')
+col3 <- append(col3, round(chisq.test(wide_data$Delayed_Healing, wide_data$Obesity, correct=FALSE)$p.value, digits = 4))
+#Partial Paresis
+col1 <- append(col1,'PartP')
+col2 <- append(col2,'G')
+col3 <- append(col3,round(chisq.test(wide_data$Partial_Paresis, wide_data$Gender, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PartP')
+col2 <- append(col2,'PolyU')
+col3 <- append(col3, round(chisq.test(wide_data$Partial_Paresis, wide_data$Polyuria, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PartP')
+col2 <- append(col2,'PolyD')
+col3 <- append(col3, round(chisq.test(wide_data$Partial_Paresis, wide_data$Polydipsia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PartP')
+col2 <- append(col2,'W')
+col3 <- append(col3, round(chisq.test(wide_data$Partial_Paresis, wide_data$Weakness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PartP')
+col2 <- append(col2,'SWL')
+col3 <- append(col3, round(chisq.test(wide_data$Partial_Paresis, wide_data$Sudden_Weight_Loss, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PartP')
+col2 <- append(col2,'PolyP')
+col3 <- append(col3, round(chisq.test(wide_data$Partial_Paresis, wide_data$Polyphagia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PartP')
+col2 <- append(col2,'GT')
+col3 <- append(col3, round(chisq.test(wide_data$Partial_Paresis, wide_data$Genital_Thrush, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PartP')
+col2 <- append(col2,'VB')
+col3 <- append(col3, round(chisq.test(wide_data$Partial_Paresis, wide_data$Visual_Blurring, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PartP')
+col2 <- append(col2,'It')
+col3 <- append(col3, round(chisq.test(wide_data$Partial_Paresis, wide_data$Itching, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PartP')
+col2 <- append(col2,'Ir')
+col3 <- append(col3, round(chisq.test(wide_data$Partial_Paresis, wide_data$Irritability, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PartP')
+col2 <- append(col2,'DH')
+col3 <- append(col3, round(chisq.test(wide_data$Partial_Paresis, wide_data$Delayed_Healing, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PartP')
+col2 <- append(col2,'MS')
+col3 <- append(col3, round(chisq.test(wide_data$Partial_Paresis, wide_data$Muscle_Stiffness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PartP')
+col2 <- append(col2,'A')
+col3 <- append(col3, round(chisq.test(wide_data$Partial_Paresis, wide_data$Alopecia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'PartP')
+col2 <- append(col2,'O')
+col3 <- append(col3, round(chisq.test(wide_data$Partial_Paresis, wide_data$Obesity, correct=FALSE)$p.value, digits = 4))
+#Muscle Stiffness
+col1 <- append(col1,'MS')
+col2 <- append(col2,'G')
+col3 <- append(col3,round(chisq.test(wide_data$Muscle_Stiffness, wide_data$Gender, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'MS')
+col2 <- append(col2,'PolyU')
+col3 <- append(col3, round(chisq.test(wide_data$Muscle_Stiffness, wide_data$Polyuria, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'MS')
+col2 <- append(col2,'PolyD')
+col3 <- append(col3, round(chisq.test(wide_data$Muscle_Stiffness, wide_data$Polydipsia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'MS')
+col2 <- append(col2,'W')
+col3 <- append(col3, round(chisq.test(wide_data$Muscle_Stiffness, wide_data$Weakness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'MS')
+col2 <- append(col2,'SWL')
+col3 <- append(col3, round(chisq.test(wide_data$Muscle_Stiffness, wide_data$Sudden_Weight_Loss, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'MS')
+col2 <- append(col2,'PolyP')
+col3 <- append(col3, round(chisq.test(wide_data$Muscle_Stiffness, wide_data$Polyphagia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'MS')
+col2 <- append(col2,'GT')
+col3 <- append(col3, round(chisq.test(wide_data$Muscle_Stiffness, wide_data$Genital_Thrush, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'MS')
+col2 <- append(col2,'VB')
+col3 <- append(col3, round(chisq.test(wide_data$Muscle_Stiffness, wide_data$Visual_Blurring, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'MS')
+col2 <- append(col2,'It')
+col3 <- append(col3, round(chisq.test(wide_data$Muscle_Stiffness, wide_data$Itching, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'MS')
+col2 <- append(col2,'Ir')
+col3 <- append(col3, round(chisq.test(wide_data$Muscle_Stiffness, wide_data$Irritability, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'MS')
+col2 <- append(col2,'DH')
+col3 <- append(col3, round(chisq.test(wide_data$Muscle_Stiffness, wide_data$Delayed_Healing, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'MS')
+col2 <- append(col2,'PartP')
+col3 <- append(col3, round(chisq.test(wide_data$Muscle_Stiffness, wide_data$Partial_Paresis, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'MS')
+col2 <- append(col2,'A')
+col3 <- append(col3, round(chisq.test(wide_data$Muscle_Stiffness, wide_data$Alopecia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'MS')
+col2 <- append(col2,'O')
+col3 <- append(col3, round(chisq.test(wide_data$Muscle_Stiffness, wide_data$Obesity, correct=FALSE)$p.value, digits = 4))
+#Alopecia
+col1 <- append(col1,'A')
+col2 <- append(col2,'G')
+col3 <- append(col3,round(chisq.test(wide_data$Alopecia, wide_data$Gender, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'A')
+col2 <- append(col2,'PolyU')
+col3 <- append(col3, round(chisq.test(wide_data$Alopecia, wide_data$Polyuria, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'A')
+col2 <- append(col2,'PolyD')
+col3 <- append(col3, round(chisq.test(wide_data$Alopecia, wide_data$Polydipsia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'A')
+col2 <- append(col2,'W')
+col3 <- append(col3, round(chisq.test(wide_data$Alopecia, wide_data$Weakness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'A')
+col2 <- append(col2,'SWL')
+col3 <- append(col3, round(chisq.test(wide_data$Alopecia, wide_data$Sudden_Weight_Loss, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'A')
+col2 <- append(col2,'PolyP')
+col3 <- append(col3, round(chisq.test(wide_data$Alopecia, wide_data$Polyphagia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'A')
+col2 <- append(col2,'GT')
+col3 <- append(col3, round(chisq.test(wide_data$Alopecia, wide_data$Genital_Thrush, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'A')
+col2 <- append(col2,'VB')
+col3 <- append(col3, round(chisq.test(wide_data$Alopecia, wide_data$Visual_Blurring, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'A')
+col2 <- append(col2,'It')
+col3 <- append(col3, round(chisq.test(wide_data$Alopecia, wide_data$Itching, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'A')
+col2 <- append(col2,'Ir')
+col3 <- append(col3, round(chisq.test(wide_data$Alopecia, wide_data$Irritability, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'A')
+col2 <- append(col2,'DH')
+col3 <- append(col3, round(chisq.test(wide_data$Alopecia, wide_data$Delayed_Healing, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'A')
+col2 <- append(col2,'PartP')
+col3 <- append(col3, round(chisq.test(wide_data$Alopecia, wide_data$Partial_Paresis, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'A')
+col2 <- append(col2,'MS')
+col3 <- append(col3, round(chisq.test(wide_data$Alopecia, wide_data$Muscle_Stiffness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'A')
+col2 <- append(col2,'O')
+col3 <- append(col3, round(chisq.test(wide_data$Alopecia, wide_data$Obesity, correct=FALSE)$p.value, digits = 4))
+#Obesity
+col1 <- append(col1,'O')
+col2 <- append(col2,'G')
+col3 <- append(col3,round(chisq.test(wide_data$Obesity, wide_data$Gender, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'O')
+col2 <- append(col2,'PolyU')
+col3 <- append(col3, round(chisq.test(wide_data$Obesity, wide_data$Polyuria, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'O')
+col2 <- append(col2,'PolyD')
+col3 <- append(col3, round(chisq.test(wide_data$Obesity, wide_data$Polydipsia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'O')
+col2 <- append(col2,'W')
+col3 <- append(col3, round(chisq.test(wide_data$Obesity, wide_data$Weakness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'O')
+col2 <- append(col2,'SWL')
+col3 <- append(col3, round(chisq.test(wide_data$Obesity, wide_data$Sudden_Weight_Loss, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'O')
+col2 <- append(col2,'PolyP')
+col3 <- append(col3, round(chisq.test(wide_data$Obesity, wide_data$Polyphagia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'O')
+col2 <- append(col2,'GT')
+col3 <- append(col3, round(chisq.test(wide_data$Obesity, wide_data$Genital_Thrush, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'O')
+col2 <- append(col2,'VB')
+col3 <- append(col3, round(chisq.test(wide_data$Obesity, wide_data$Visual_Blurring, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'O')
+col2 <- append(col2,'It')
+col3 <- append(col3, round(chisq.test(wide_data$Obesity, wide_data$Itching, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'O')
+col2 <- append(col2,'Ir')
+col3 <- append(col3, round(chisq.test(wide_data$Obesity, wide_data$Irritability, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'O')
+col2 <- append(col2,'DH')
+col3 <- append(col3, round(chisq.test(wide_data$Obesity, wide_data$Delayed_Healing, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'O')
+col2 <- append(col2,'PartP')
+col3 <- append(col3, round(chisq.test(wide_data$Obesity, wide_data$Partial_Paresis, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'O')
+col2 <- append(col2,'MS')
+col3 <- append(col3, round(chisq.test(wide_data$Obesity, wide_data$Muscle_Stiffness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'O')
+col2 <- append(col2,'A')
+col3 <- append(col3, round(chisq.test(wide_data$Obesity, wide_data$Alopecia, correct=FALSE)$p.value, digits = 4))
+#Weakness
+col1 <- append(col1,'W')
+col2 <- append(col2,'G')
+col3 <- append(col3,round(chisq.test(wide_data$Weakness, wide_data$Gender, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'W')
+col2 <- append(col2,'PolyU')
+col3 <- append(col3, round(chisq.test(wide_data$Weakness, wide_data$Polyuria, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'W')
+col2 <- append(col2,'PolyD')
+col3 <- append(col3, round(chisq.test(wide_data$Weakness, wide_data$Polydipsia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'W')
+col2 <- append(col2,'DH')
+col3 <- append(col3, round(chisq.test(wide_data$Weakness, wide_data$Delayed_Healing, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'W')
+col2 <- append(col2,'SWL')
+col3 <- append(col3, round(chisq.test(wide_data$Weakness, wide_data$Sudden_Weight_Loss, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'W')
+col2 <- append(col2,'PolyP')
+col3 <- append(col3, round(chisq.test(wide_data$Weakness, wide_data$Polyphagia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'W')
+col2 <- append(col2,'GT')
+col3 <- append(col3, round(chisq.test(wide_data$Weakness, wide_data$Genital_Thrush, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'W')
+col2 <- append(col2,'VB')
+col3 <- append(col3, round(chisq.test(wide_data$Weakness, wide_data$Visual_Blurring, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'W')
+col2 <- append(col2,'It')
+col3 <- append(col3, round(chisq.test(wide_data$Weakness, wide_data$Itching, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'W')
+col2 <- append(col2,'Ir')
+col3 <- append(col3, round(chisq.test(wide_data$Weakness, wide_data$Irritability, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'W')
+col2 <- append(col2,'PartP')
+col3 <- append(col3, round(chisq.test(wide_data$Weakness, wide_data$Partial_Paresis, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'W')
+col2 <- append(col2,'MS')
+col3 <- append(col3, round(chisq.test(wide_data$Weakness, wide_data$Muscle_Stiffness, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'W')
+col2 <- append(col2,'A')
+col3 <- append(col3, round(chisq.test(wide_data$Weakness, wide_data$Alopecia, correct=FALSE)$p.value, digits = 4))
+col1 <- append(col1,'W')
+col2 <- append(col2,'O')
+col3 <- append(col3, round(chisq.test(wide_data$Weakness, wide_data$Obesity, correct=FALSE)$p.value, digits = 4))
+
+#present in matrix
+df_r <- data_frame(col1, col2, col3)
+df_rr <- df_r %>% mutate(col3 = round(col3, digits = 1))
+mat <- spread(df_rr, col2, col3, fill = 0)
+
+apply(mat,2,max) 
+
+#split data in training and test dataset 80%~20% split
+set.seed(1, sample.kind="Rounding") # if using R 3.5 or earlier, use `set.seed(1)`
+test_index <- createDataPartition(y = wide_data$Class, times = 1, p = 0.2, list = FALSE)
+train <- wide_data[-test_index,]
+test <- wide_data[test_index,]
+
+#loss function sqrt
+RMSE <- function(true_ratings, predicted_ratings){
+  sqrt(mean((true_ratings - predicted_ratings)^2))
+}
+
+#build model
+#knn model
+model_knn <- train(Class ~ ., data=train, method="knn" )
+knn_tune <- model_knn$bestTune['k']
+ggplot(model_knn)
+fit_knn <- predict(model_knn, test)
+true_rating <- ifelse(test$Class=="Positive", 1,0)
+predicted_rating <- ifelse(fit_knn=="Positive", 1,0)
+rmse_knn <- RMSE(true_rating,predicted_rating)
+knn_accuracy <- confusionMatrix(fit_knn, as.factor(test$Class))$overall['Accuracy']
+
+model_results <- data_frame(method = "knn", RMSE = rmse_knn, accuracy = knn_accuracy)
+model_results %>% knitr::kable()
+
+#Rborist model
+model_rf <- train(Class ~ ., data=train, method = "Rborist",
+                  tuneGrid = data.frame(predFixed = 2, minNode = c(3, 50)), importance = TRUE)
+rf_tune <- model_rf$bestTune
+fit_rf <- predict(model_rf, test)
+true_rating <- ifelse(test$Class=="Positive", 1,0)
+predicted_rating <- ifelse(fit_rf=="Positive", 1,0)
+rmse_rf <- RMSE(true_rating,predicted_rating)
+rf_accuracy <- confusionMatrix(fit_rf, as.factor(test$Class))$overall['Accuracy']
+rf_plot <- plot(varImp(model_rf))
+
+
+model_results <- bind_rows(model_results,
+                           data_frame(method = "Rborist", RMSE = rmse_rf, accuracy = rf_accuracy))
+
+model_results %>% knitr::kable()
+
+#RandomForest method
+model_rf1 <- train(Class ~ ., data=train, method = "rf", tuneGrid = data.frame(mtry = seq(1,7)), ntree = 100)
+rf1_tune <- model_rf1$bestTune
+fit_rf1 <- predict(model_rf1, test)
+true_rating <- ifelse(test$Class=="Positive", 1,0)
+predicted_rating <- ifelse(fit_rf1=="Positive", 1,0)
+rmse_rf1 <- RMSE(true_rating,predicted_rating)
+rf1_accuracy <- confusionMatrix(fit_rf1, as.factor(test$Class))$overall['Accuracy']
+plot(varImp(model_rf1))
+model_rf1
+
+model_results <- bind_rows(model_results,
+                           data_frame(method = "Random Forest", RMSE = rmse_rf1, accuracy = rf1_accuracy))
+
+model_results %>% knitr::kable()
+
+#SVM model
+model_svm <- train(Class ~ ., data=train, method = "svmLinear", importance = TRUE)
+fit_svm <- predict(model_svm, test)
+true_rating <- ifelse(test$Class=="Positive", 1,0)
+predicted_rating <- ifelse(fit_svm=="Positive", 1,0)
+rmse_svm <- RMSE(true_rating,predicted_rating)
+svm_accuracy <- confusionMatrix(fit_svm, as.factor(test$Class))$overall['Accuracy']
+
+
+model_results <- bind_rows(model_results,
+                           data_frame(method = "SVM", RMSE = rmse_svm, accuracy = svm_accuracy))
+
+model_results %>% knitr::kable()
+
+#rpart model
+model_rpart_c <- train(Class ~ . , data=train, method = "rpart", control = rpart.control(minsplit = 5, minbucket = 1, maxdepth = 3, cp =0), tuneLength = 10 )
+fit_rpart_c <- predict(model_rpart_c, test)
+true_rating <- ifelse(test$Class=="Positive", 1,0)
+predicted_rating <- ifelse(fit_rpart_c=="Positive", 1,0)
+rmse_rpart_c <- RMSE(true_rating,predicted_rating)
+rpart_c_accuracy <- confusionMatrix(fit_rpart_c, as.factor(test$Class))$overall['Accuracy']
+varImp(model_rpart_c)
+plot(varImp(model_rpart_c))
+rpart_plot <- rpart.plot(model_rpart_c$finalModel)
+
+model_results <- bind_rows(model_results,
+                           data_frame(method = "Rpart", RMSE = rmse_rpart_c, accuracy = rpart_c_accuracy))
+
+#sort output by accuracy and RMSE
+models_results_table <- model_results[with(model_results, order(-accuracy,-RMSE)),] %>% knitr::kable()
+
+
